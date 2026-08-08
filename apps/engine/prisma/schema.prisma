@@ -73,6 +73,8 @@ model Document {
   title      String
   sourceType SourceType
   sourceUrl  String?
+  storageKey   String?     
+  errorMessage String?          
   status     DocumentStatus @default(PENDING)
   createdAt  DateTime       @default(now())
   updatedAt  DateTime       @updatedAt
