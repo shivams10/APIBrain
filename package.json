@@ -3,7 +3,8 @@
   "private": true,
   "packageManager": "pnpm@9.15.0",
   "scripts": {
-  "dev:engine": "pnpm --filter @apibrain/engine dev",
-  "dev:studio": "pnpm --filter @apibrain/studio dev"
-}
+    "dev:engine": "pnpm --filter @apibrain/engine dev",
+    "dev:studio": "pnpm --filter @apibrain/studio dev",
+    "dev:worker": "pnpm --filter @apibrain/engine dev:worker"
+  }
 }
