@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { requireAuth } from "../middleware/requireAuth";
 import * as projectController from "../controllers/project.controller";
+import * as queryController from "../controllers/query.controller";
 
 export const projectRouter = Router();
 projectRouter.use(requireAuth);
@@ -15,3 +16,4 @@ projectRouter.post("/", projectController.create);
 projectRouter.get("/", projectController.list);
 projectRouter.post("/:projectId/documents", upload.single("file"), projectController.ingestDocument);
 projectRouter.get("/:projectId/documents", projectController.listDocuments);
+projectRouter.post("/:projectId/query", queryController.ask);
