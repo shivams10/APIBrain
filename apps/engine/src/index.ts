@@ -5,6 +5,7 @@ import cookieParser from "cookie-parser";
 import { authRouter } from "./routes/auth.route";
 import { projectRouter } from "./routes/project.routes";
 import { documentRouter } from "./routes/document.routes";
+import { errorHandler } from "./middleware/errorHandler";
 
 const app = express();
 const PORT = process.env.PORT ?? 4000;
@@ -20,6 +21,8 @@ app.get("/health", (_req, res) => {
 app.use("/auth", authRouter);
 app.use("/projects", projectRouter);
 app.use("/documents", documentRouter);
+
+app.use(errorHandler);
 
 app.listen(PORT, () => {
   console.log(`Server is running at PORT: ${PORT}`);

@@ -1,8 +1,8 @@
 import type { RequestHandler } from "express";
 import { z } from "zod";
-import { prisma } from "../lib/prisma";
-import { uploadObject } from "../lib/s3";
-import { ingestionQueue } from "../lib/queue";
+import { findOwnedProject } from "../lib/ownership";
+import * as projectService from "../services/project.service";
+import * as ingestionService from "../services/ingestion.service";
 
 const createProjectSchema = z.object({ name: z.string().min(1).max(200) });
 
@@ -12,23 +12,13 @@ export const create: RequestHandler = async (req, res) => {
     res.status(400).json({ error: "Invalid project name" });
     return;
   }
-  const project = await prisma.project.create({
-    data: { name: parsed.data.name, userId: req.user!.id },
-  });
+  const project = await projectService.createProject(req.user!.id, parsed.data.name);
   res.status(201).json(project);
 };
 
 export const list: RequestHandler = async (req, res) => {
-  const projects = await prisma.project.findMany({
-    where: { userId: req.user!.id },
-    orderBy: { createdAt: "desc" },
-  });
-  res.json(projects);
+  res.json(await projectService.listProjects(req.user!.id));
 };
-
-async function findOwnedProject(projectId: string, userId: string) {
-  return prisma.project.findFirst({ where: { id: projectId, userId } });
-}
 
 const urlIngestSchema = z.object({
   title: z.string().min(1).max(200),
@@ -44,22 +34,8 @@ export const ingestDocument: RequestHandler<{ projectId: string }> = async (req,
   }
 
   if (req.file) {
-    const sourceType = req.file.mimetype === "application/pdf" ? "PDF" : "MARKDOWN";
-    const title = req.body.title || req.file.originalname;
-
-    const document = await prisma.document.create({
-      data: { projectId: project.id, title, sourceType, status: "PENDING" },
-    });
-
-    const storageKey = `documents/${document.id}`;
-    await uploadObject(storageKey, req.file.buffer, req.file.mimetype);
-    const updatedDocument = await prisma.document.update({
-      where: { id: document.id },
-      data: { storageKey },
-    });
-
-    await ingestionQueue.add("ingest", { documentId: document.id });
-    res.status(202).json(updatedDocument);
+    const document = await ingestionService.ingestFile(project.id, req.body.title, req.file);
+    res.status(202).json(document);
     return;
   }
 
@@ -69,17 +45,7 @@ export const ingestDocument: RequestHandler<{ projectId: string }> = async (req,
     return;
   }
 
-  const document = await prisma.document.create({
-    data: {
-      projectId: project.id,
-      title: parsed.data.title,
-      sourceType: "URL",
-      sourceUrl: parsed.data.url,
-      status: "PENDING",
-    },
-  });
-
-  await ingestionQueue.add("ingest", { documentId: document.id });
+  const document = await ingestionService.ingestUrl(project.id, parsed.data.title, parsed.data.url);
   res.status(202).json(document);
 };
 
@@ -89,9 +55,5 @@ export const listDocuments: RequestHandler<{ projectId: string }> = async (req, 
     res.status(404).json({ error: "Project not found" });
     return;
   }
-  const documents = await prisma.document.findMany({
-    where: { projectId: project.id },
-    orderBy: { createdAt: "desc" },
-  });
-  res.json(documents);
+  res.json(await ingestionService.listDocuments(project.id));
 };
