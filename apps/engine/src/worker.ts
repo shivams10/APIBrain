@@ -20,14 +20,22 @@ async function processIngestionJob(job: Job<IngestionJobData>) {
 
   const text = await extractText(document.sourceType, source);
   const chunks = await chunkText(text);
-  const embeddings = await embedTexts(chunks);
 
-  for (let i = 0; i < chunks.length; i++) {
-    const vectorLiteral = `[${embeddings[i].join(",")}]`;
-    await prisma.$executeRaw`
-      INSERT INTO chunks (id, "documentId", content, embedding, "chunkIndex", "createdAt")
-      VALUES (${crypto.randomUUID()}, ${document.id}, ${chunks[i]}, ${vectorLiteral}::vector, ${i}, now())
-    `;
+  // OpenAI's embeddings endpoint caps total tokens *per request* across the whole batch, not
+  // per chunk — a large document (thousands of chunks) sent in one call can blow past that
+  // ceiling. Batch in fixed-size groups so document size can't crash the embedding call.
+  const EMBEDDING_BATCH_SIZE = 100;
+  for (let batchStart = 0; batchStart < chunks.length; batchStart += EMBEDDING_BATCH_SIZE) {
+    const batchChunks = chunks.slice(batchStart, batchStart + EMBEDDING_BATCH_SIZE);
+    const batchEmbeddings = await embedTexts(batchChunks);
+
+    for (let i = 0; i < batchChunks.length; i++) {
+      const vectorLiteral = `[${batchEmbeddings[i].join(",")}]`;
+      await prisma.$executeRaw`
+        INSERT INTO chunks (id, "documentId", content, embedding, "chunkIndex", "createdAt")
+        VALUES (${crypto.randomUUID()}, ${document.id}, ${batchChunks[i]}, ${vectorLiteral}::vector, ${batchStart + i}, now())
+      `;
+    }
   }
 
   await prisma.document.update({ where: { id: document.id }, data: { status: "READY" } });
